@@ -1,13 +1,134 @@
 # PCT Planner
 
-## Overview
+## 概述 / Overview
 
-This is an implementation of paper **Efficient Global Navigational Planning in 3-D Structures Based on Point Cloud Tomography** (accepted by TMECH).
-It provides a highly efficient and extensible global navigation framework based on a tomographic understanding of the environment to navigate ground robots in multi-layer structures.
+本项目是论文 **Efficient Global Navigational Planning in 3-D Structures Based on Point Cloud Tomography** (TMECH收录) 的实现。
+基于点云断层摄影的环境理解，提供高效可扩展的全局导航框架，用于多层结构中的地面机器人导航。
 
-**Demonstrations**: [pct_planner](https://byangw.github.io/projects/tmech2024/)
+**演示视频 / Demonstrations**: [pct_planner](https://byangw.github.io/projects/tmech2024/)
 
 ![demo](rsc/docs/demo.png)
+
+---
+
+## 中文说明
+
+### 功能特点
+
+- **多楼层路径规划**：支持楼梯、坡道、过桥等多层结构导航
+- **GPU加速处理**：使用CuPy进行CUDA加速，实时生成环境断层图
+- **3D轨迹输出**：输出包含Z坐标的完整3D路径，可直接用于机器狗控制
+- **ROS2原生支持**：完整的ROS2 Humble接口，支持RViz2交互式规划
+
+### 系统架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     PCT Planner 系统架构                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐   │
+│  │   Tomography    │     │    Planner      │     │    ROS2接口     │   │
+│  │   断层图生成    │────▶│   路径规划      │────▶│   话题发布      │   │
+│  │   (GPU加速)     │     │   (C++核心)     │     │   (Python)      │   │
+│  └─────────────────┘     └─────────────────┘     └─────────────────┘   │
+│         │                        │                       │              │
+│         ▼                        ▼                       ▼              │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐   │
+│  │ 点云 → 多层切片 │     │ A*搜索 + GPMP   │     │ /pct_path       │   │
+│  │ 可通行性分析    │     │ 轨迹优化        │     │ nav_msgs/Path   │   │
+│  │ 楼梯/坡道检测   │     │ 高度平滑        │     │ 3D坐标输出      │   │
+│  └─────────────────┘     └─────────────────┘     └─────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 快速开始
+
+#### 1. 环境要求
+
+- Ubuntu 22.04
+- ROS2 Humble
+- CUDA 11.x 或 12.x
+- Python 3.10+
+
+#### 2. 安装依赖
+
+```bash
+# Python依赖
+pip install cupy-cuda11x open3d numpy scipy
+
+# 注意：根据你的CUDA版本选择CuPy
+# CUDA 11.x: pip install cupy-cuda11x
+# CUDA 12.x: pip install cupy-cuda12x
+```
+
+#### 3. 编译
+
+```bash
+cd planner/
+./build_thirdparty.sh   # 编译GTSAM和OSQP（约5-10分钟）
+./build.sh              # 编译Python绑定库
+```
+
+#### 4. 设置环境变量
+
+```bash
+# 添加到 ~/.bashrc
+export LD_LIBRARY_PATH=/path/to/pct_planner/planner/lib/3rdparty/gtsam-4.1.1/install/lib:/path/to/pct_planner/planner/lib/build/src/common/smoothing:$LD_LIBRARY_PATH
+export PYTHONPATH=/path/to/pct_planner/planner/lib:$PYTHONPATH
+```
+
+#### 5. 运行示例
+
+```bash
+# 解压示例PCD文件
+cd rsc/pcd/
+unzip pcd_files.zip
+
+# 生成断层图
+cd tomography/scripts/
+python3 run_standalone.py --scene Building
+
+# 路径规划
+cd planner/scripts/
+python3 plan_standalone.py --tomo building2_9 --start -5 -3 --end 5 3
+```
+
+### 输出格式
+
+规划结果输出为 `nav_msgs/Path` 消息，包含：
+
+```python
+path_msg.poses[i].pose.position.x  # X坐标
+path_msg.poses[i].pose.position.y  # Y坐标
+path_msg.poses[i].pose.position.z  # Z高度（支持多楼层）
+```
+
+### 与机器狗系统集成
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   PCT Planner   │     │  EGO Planner    │     │   机器狗控制    │
+│   (全局路径)    │────▶│   (局部优化)    │────▶│   (执行)        │
+│   多楼层支持    │     │   3D避障        │     │   /cmd_vel      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │
+        ▼                       ▼
+   /pct_path              /position_cmd
+   (nav_msgs/Path)        → 转换为/cmd_vel
+```
+
+### 性能指标
+
+| 指标 | 数值 |
+|------|------|
+| 断层图生成 | ~40ms (85万点) |
+| 路径搜索 | ~20ms |
+| 轨迹优化 | ~375ms |
+| 输出航点 | 1000+ |
+
+---
 
 ## Citing
 
@@ -33,20 +154,20 @@ If you use PCT Planner, please cite the following paper:
 
 - Ubuntu 22.04
 - **ROS2 Humble** (ros-humble-desktop-full) — see [ROS2 install guide](https://docs.ros.org/en/humble/Installation.html)
-- CUDA 12.x (tested with 12.8)
+- CUDA 11.x or 12.x
 - CMake >= 3.22, GCC >= 11, Eigen3
 
-> **Note:** The original codebase targeted ROS1 Noetic. This fork has been fully ported to **ROS2 Humble** and tested on Ubuntu 22.04 + CUDA 12.8.
+> **Note:** The original codebase targeted ROS1 Noetic. This fork has been fully ported to **ROS2 Humble** and tested on Ubuntu 22.04.
 
 ### Python
 
 - Python >= 3.10
-- [CuPy](https://docs.cupy.dev/en/stable/install.html) matching your CUDA version (e.g. `cupy-cuda12x`)
+- [CuPy](https://docs.cupy.dev/en/stable/install.html) matching your CUDA version
 - Open3D
 - NumPy >= 2.x, SciPy
 
 ```bash
-pip install cupy-cuda12x open3d numpy scipy
+pip install cupy-cuda11x open3d numpy scipy
 ```
 
 ## Build & Install
@@ -60,8 +181,6 @@ cd planner/
 ./build_thirdparty.sh   # builds GTSAM 4.1.1 and OSQP from source (~5–10 min)
 ./build.sh              # builds the pybind11 .so modules
 ```
-
-> See **SETUP.md** for a full step-by-step guide including common pitfalls and compatibility notes.
 
 ## Run Examples — Original Scenes (ROS2)
 
@@ -86,7 +205,7 @@ The generated tomogram is saved to **rsc/tomogram/**.
 
 ```bash
 cd planner/scripts/
-python3 plan_standalone.py --scene Building
+python3 plan_standalone.py --tomo building2_9 --start -5 -3 --end 5 3
 ```
 
 ---
