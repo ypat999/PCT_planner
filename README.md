@@ -81,6 +81,28 @@ export PYTHONPATH=/path/to/pct_planner/planner/lib:$PYTHONPATH
 
 #### 5. 运行示例
 
+**方式一：ROS2交互模式（推荐）**
+
+```bash
+# 终端1：启动规划节点
+source /opt/ros/humble/setup.bash
+cd /home/ywj/git/3d_dog_navi_ros2/src/pct_planner
+python3 run_ros2_interactive.py --scene Building --skip-tomo
+
+# 终端2：启动RViz2可视化
+source /opt/ros/humble/setup.bash
+cd /home/ywj/git/3d_dog_navi_ros2/src/pct_planner
+rviz2 -d rsc/rviz/pct_ros2.rviz
+```
+
+在RViz2中：
+1. 点击工具栏的 "Publish Point" 按钮
+2. 点击地图选择起点（绿色球体）
+3. 再次点击选择终点（红色球体）
+4. 自动规划并显示路径（绿色线条）
+
+**方式二：独立运行模式**
+
 ```bash
 # 解压示例PCD文件
 cd rsc/pcd/
@@ -231,23 +253,36 @@ Output: `rsc/tomogram/clinic.pickle`
 
 ### 3. Launch the interactive node + RViz2
 
-**Option A — two terminals:**
+**完整运行指令（已测试通过）：**
 
 ```bash
-# Terminal 1: planner node
+# 终端1：启动规划节点（在项目根目录运行）
 source /opt/ros/humble/setup.bash
-python3 run_ros2_interactive.py --skip-tomo
+cd /home/ywj/git/3d_dog_navi_ros2/src/pct_planner
+python3 run_ros2_interactive.py --scene Building --skip-tomo
 
-# Terminal 2: RViz2
+# 终端2：启动RViz2可视化
 source /opt/ros/humble/setup.bash
+cd /home/ywj/git/3d_dog_navi_ros2/src/pct_planner
 rviz2 -d rsc/rviz/pct_ros2.rviz
 ```
 
-**Option B — single launcher (RViz2 opens automatically):**
+**单命令启动（自动打开RViz2）：**
 
 ```bash
-./launch_ros2.sh --skip-tomo
+cd /home/ywj/git/3d_dog_navi_ros2/src/pct_planner
+./launch_ros2.sh --scene Building --skip-tomo
 ```
+
+**Available scenes:**
+- `Building` - 多层室内场景 (building2_9.pcd) **[默认]**
+- `Clinic` - 自定义场景 (clinic.pcd)
+- `Plaza` - 室外广场场景 (plaza3_10.pcd)
+
+**启动后RViz2显示内容：**
+- `/global_points` - 原始点云（白色，半透明）
+- `/tomogram` - 断层图（绿色=可通行，红色=障碍）
+- TF树: `world -> map`
 
 ### 4. Pick start and end points in RViz2
 
@@ -273,10 +308,11 @@ rviz2 -d rsc/rviz/pct_ros2.rviz
 
 | Script | Description |
 |--------|-------------|
-| `run_ros2_interactive.py` | Main interactive ROS2 node. Subscribes to `/clicked_point`, plans on each start+end pair, publishes path and markers. |
+| `run_ros2_interactive.py` | Main interactive ROS2 node (项目根目录). Subscribes to `/clicked_point`, plans on each start+end pair, publishes path and markers. |
 | `launch_ros2.sh` | Launches `run_ros2_interactive.py` in the background and opens RViz2. Cleans up both processes on exit. |
 | `tomography/scripts/run_standalone.py` | Runs tomography without ROS. Saves pickle to `rsc/tomogram/`. |
 | `planner/scripts/plan_standalone.py` | Runs the planner without ROS on a saved tomogram. |
+| `planner/scripts/plan_ros2.py` | ROS2 planner node, publishes path to `/pct_path`. |
 
 ---
 

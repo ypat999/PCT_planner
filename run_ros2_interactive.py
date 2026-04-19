@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Interactive ROS2 PCT Planner for clinic.pcd
+Interactive ROS2 PCT Planner
 
 Workflow:
-  1. Runs tomography on clinic.pcd (or loads existing tomogram)
+  1. Runs tomography on PCD file (or loads existing tomogram)
   2. Publishes the point cloud + tomogram to RViz2
   3. Waits for two /clicked_point messages (RViz2 "Publish Point" tool)
      - 1st click → start position
@@ -13,7 +13,12 @@ Workflow:
 
 Usage:
   source /opt/ros/humble/setup.bash
-  python3 run_ros2_interactive.py [--skip-tomo]
+  python3 run_ros2_interactive.py --scene Building [--skip-tomo]
+  
+Scenes:
+  - Building: multi-layer indoor (building2_9.pcd)
+  - Clinic: custom scene (clinic.pcd)
+  - Plaza: outdoor plaza (plaza3_10.pcd)
 """
 
 import os, sys, argparse, pickle, time
@@ -41,10 +46,11 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import ColorRGBA
 from sensor_msgs.msg import PointCloud2, PointField
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import PointStamped, TransformStamped
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker
+from tf2_ros import StaticTransformBroadcaster
 
 import importlib.util as _ilu
 
@@ -63,7 +69,13 @@ from tomogram import Tomogram
 
 _tomo_cfg = _load(ROOT + '/tomography/config/__init__.py', 'tomo_config')
 TomoCfg   = _tomo_cfg.Config
-SceneClinic = _tomo_cfg.SceneClinic
+
+# Scene configs
+SCENES = {
+    'Building': _tomo_cfg.SceneBuilding,
+    'Clinic': _tomo_cfg.SceneClinic,
+    'Plaza': _tomo_cfg.ScenePlaza,
+}
 
 # Planner modules
 sys.path.insert(0, ROOT + '/planner/scripts')
@@ -154,14 +166,22 @@ def sphere_marker(pos, node, marker_id, color, frame='map'):
 # ─── main node ──────────────────────────────────────────────────────────────
 
 class PCTNode(Node):
-    def __init__(self, skip_tomo: bool):
+    def __init__(self, scene_name: str, skip_tomo: bool):
         super().__init__('pct_planner_ros2')
+        
+        self.scene_name = scene_name
+        self.scene_cfg = SCENES.get(scene_name, SCENES['Building'])
+        self.pcd_name = os.path.splitext(self.scene_cfg.pcd.file_name)[0]
 
         # Publishers
         self.pc_pub     = self.create_publisher(PointCloud2, '/global_points', 1)
         self.tomo_pub   = self.create_publisher(PointCloud2, '/tomogram',       1)
         self.path_pub   = self.create_publisher(Path,        '/pct_path',       1)
         self.marker_pub = self.create_publisher(Marker,      '/pct_marker',     1)
+        
+        # Static TF broadcaster for map frame
+        self.tf_static_broadcaster = StaticTransformBroadcaster(self)
+        self._publish_static_tf()
 
         # Click state
         self._clicks = []
@@ -169,18 +189,18 @@ class PCTNode(Node):
         self._end    = None
 
         # ── Step 1: tomography ──
-        tomo_pickle = ROOT + '/rsc/tomogram/clinic.pickle'
+        tomo_pickle = ROOT + f'/rsc/tomogram/{self.pcd_name}.pickle'
         if skip_tomo and os.path.exists(tomo_pickle):
-            self.get_logger().info('Skipping tomography, loading existing pickle.')
+            self.get_logger().info(f'Skipping tomography, loading existing pickle: {tomo_pickle}')
         else:
-            self.get_logger().info('Running tomography on clinic.pcd …')
+            self.get_logger().info(f'Running tomography on {self.pcd_name}.pcd …')
             self._run_tomography(tomo_pickle)
 
         # ── Step 2: load planner ──
         self.get_logger().info('Loading planner …')
         plan_cfg = PlanCfg()
         self.planner = TomogramPlanner(plan_cfg)
-        self.planner.loadTomogram('clinic')
+        self.planner.loadTomogram(self.pcd_name)
         self.get_logger().info('Planner ready.')
 
         # ── Publish point cloud + tomogram ──
@@ -194,7 +214,7 @@ class PCTNode(Node):
         self.get_logger().info(
             '\n'
             '══════════════════════════════════════════════\n'
-            ' PCT Planner – Interactive ROS2 mode\n'
+            f' PCT Planner – Interactive ROS2 mode ({scene_name})\n'
             '──────────────────────────────────────────────\n'
             ' In RViz2:\n'
             '   1. Click "Publish Point" toolbar button\n'
@@ -205,15 +225,31 @@ class PCTNode(Node):
             '══════════════════════════════════════════════'
         )
 
+    def _publish_static_tf(self):
+        """Publish static TF from world to map frame."""
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'world'
+        t.child_frame_id = 'map'
+        t.transform.translation.x = 0.0
+        t.transform.translation.y = 0.0
+        t.transform.translation.z = 0.0
+        t.transform.rotation.x = 0.0
+        t.transform.rotation.y = 0.0
+        t.transform.rotation.z = 0.0
+        t.transform.rotation.w = 1.0
+        self.tf_static_broadcaster.sendTransform(t)
+        self.get_logger().info('Published static TF: world -> map')
+
     # ── tomography ──────────────────────────────────────────────────────────
 
     def _run_tomography(self, out_path):
         import sys as _sys
         tomo_cfg = TomoCfg()
-        scene_cfg = SceneClinic
+        scene_cfg = self.scene_cfg
 
         tomo = Tomogram(scene_cfg)
-        pcd_path = ROOT + '/rsc/pcd/clinic.pcd'
+        pcd_path = ROOT + f'/rsc/pcd/{self.pcd_name}.pcd'
         pcd = o3d.io.read_point_cloud(pcd_path)
         pts = np.asarray(pcd.points).astype(np.float32)
         self.get_logger().info(f'PCD points: {pts.shape[0]}')
@@ -252,10 +288,9 @@ class PCTNode(Node):
 
     def _publish_pcd(self):
         if not hasattr(self, '_pts_raw'):
-            pcd = o3d.io.read_point_cloud(ROOT + '/rsc/pcd/clinic.pcd')
+            pcd = o3d.io.read_point_cloud(ROOT + f'/rsc/pcd/{self.pcd_name}.pcd')
             self._pts_raw = np.asarray(pcd.points).astype(np.float32)
         pts = self._pts_raw
-        # Subsample for publishing (every 10th point)
         pts_sub = pts[::10]
         msg = make_pc2(self, pts_sub)
         self.pc_pub.publish(msg)
@@ -263,7 +298,7 @@ class PCTNode(Node):
 
     def _publish_tomo(self):
         if not hasattr(self, '_tomo_data'):
-            with open(ROOT + '/rsc/tomogram/clinic.pickle', 'rb') as f:
+            with open(ROOT + f'/rsc/tomogram/{self.pcd_name}.pickle', 'rb') as f:
                 self._tomo_data = pickle.load(f)
 
         d     = self._tomo_data
@@ -295,15 +330,9 @@ class PCTNode(Node):
     # ── click handler ────────────────────────────────────────────────────────
 
     def _z_to_slice(self, x, y, z):
-        """Map a 3D world point to the best-matching simplified slice index.
-
-        For each simplified slice, the tomogram stores the floor height at
-        every grid cell.  We find the slice whose floor is closest to (and at
-        or below) the clicked z, which corresponds to the floor the user is
-        standing on.
-        """
+        """Map a 3D world point to the best-matching simplified slice index."""
         if not hasattr(self, '_tomo_data'):
-            with open(ROOT + '/rsc/tomogram/clinic.pickle', 'rb') as f:
+            with open(ROOT + f'/rsc/tomogram/{self.pcd_name}.pickle', 'rb') as f:
                 self._tomo_data = pickle.load(f)
 
         d      = self._tomo_data
@@ -380,7 +409,7 @@ class PCTNode(Node):
         self.path_pub.publish(traj_to_path(traj, self))
         self.marker_pub.publish(traj_to_marker(traj, self))
 
-        out = ROOT + '/rsc/clinic_traj.npy'
+        out = ROOT + f'/rsc/{self.pcd_name}_traj.npy'
         np.save(out, traj)
         self.get_logger().info(f'Saved trajectory to {out}')
 
@@ -389,12 +418,15 @@ class PCTNode(Node):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--scene', type=str, default='Building',
+                        choices=['Building', 'Clinic', 'Plaza'],
+                        help='Scene name (default: Building)')
     parser.add_argument('--skip-tomo', action='store_true',
-                        help='Skip tomography if clinic.pickle already exists')
+                        help='Skip tomography if pickle already exists')
     args, _ = parser.parse_known_args()
 
     rclpy.init()
-    node = PCTNode(skip_tomo=args.skip_tomo)
+    node = PCTNode(scene_name=args.scene, skip_tomo=args.skip_tomo)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
