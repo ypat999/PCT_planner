@@ -73,6 +73,7 @@ TomoCfg   = _tomo_cfg.Config
 # Scene configs
 SCENES = {
     'Building': _tomo_cfg.SceneBuilding,
+    'BuildingSim': _tomo_cfg.SceneBuildingSim,
     'Clinic': _tomo_cfg.SceneClinic,
     'Plaza': _tomo_cfg.ScenePlaza,
 }
