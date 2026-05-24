@@ -104,7 +104,7 @@ class Astar {
   double cost_threshold_ = 35;
   double step_cost_weight_ = 1.0;
 
-  int search_layer_depth_ = 1;
+  int search_layer_depth_ = 3;
   std::vector<int> search_layers_offset_;
 
   bool debug_ = false;

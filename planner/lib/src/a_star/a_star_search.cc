@@ -143,43 +143,55 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
         continue;
       }
 
-      auto neighbor_node = &grid_map_[layer][i][j];
+      std::vector<Node*> candidate_nodes;
 
-      if (neighbor_node->cost > cost_threshold_) {
-        if (abs(neighbor_node->ele) < 0.5) {
-          continue;
-        } else {
-          if (std::abs(neighbor_node->height - current_node->height) > 0.3) {
-            continue;
+      auto primary_node = &grid_map_[layer][i][j];
+      if (primary_node->cost <= cost_threshold_) {
+        candidate_nodes.push_back(primary_node);
+      }
+
+      for (const auto alt_offset : search_layers_offset_) {
+        if (alt_offset == 0) continue;
+        int alt_layer = layer + alt_offset;
+        if (alt_layer < 0 || alt_layer >= max_layers_) continue;
+        auto alt_node = &grid_map_[alt_layer][i][j];
+        if (alt_node->cost <= cost_threshold_ &&
+            std::abs(alt_node->height - current_node->height) <= resolution_ * 5) {
+          candidate_nodes.push_back(alt_node);
+        }
+      }
+
+      if (candidate_nodes.empty()) {
+        auto neighbor_node = &grid_map_[layer][i][j];
+        if (neighbor_node->cost > cost_threshold_ && abs(neighbor_node->ele) >= 0.5) {
+          if (std::abs(neighbor_node->height - current_node->height) <= resolution_ * 4) {
+            candidate_nodes.push_back(neighbor_node);
           }
         }
       }
 
-      // if ((neighbor_node->cost > cost_threshold_) ||
-      //     std::abs(neighbor_node->height - current_node->height) > 0.3) {
-      //   continue;
-      // }
+      for (auto neighbor_node : candidate_nodes) {
+        auto diff = neighbor_node->idx - current_node->idx;
+        double step_cost = step_cost_weight_ * neighbor_node->cost;
+        if (step_cost < 5) step_cost = 0.0;
+        tentative_g =
+            current_node->g +
+            std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]) +
+            step_cost;
 
-      auto diff = neighbor_node->idx - current_node->idx;
-      double step_cost = step_cost_weight_ * neighbor_node->cost;
-      if (step_cost < 5) step_cost = 0.0;
-      tentative_g =
-          current_node->g +
-          std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]) +
-          step_cost;
-
-      auto p_neighbor = closed_set.find(GetHash(neighbor_node->idx));
-      if (p_neighbor != closed_set.end()) {
-        if (tentative_g >= p_neighbor->second->g) {
-          continue;
+        auto p_neighbor = closed_set.find(GetHash(neighbor_node->idx));
+        if (p_neighbor != closed_set.end()) {
+          if (tentative_g >= p_neighbor->second->g) {
+            continue;
+          }
         }
-      }
 
-      if (tentative_g < neighbor_node->g) {
-        neighbor_node->g = tentative_g;
-        neighbor_node->f = tentative_g + GetHeuristic(neighbor_node, goal_node);
-        neighbor_node->parent = current_node;
-        open_set.push(neighbor_node);
+        if (tentative_g < neighbor_node->g) {
+          neighbor_node->g = tentative_g;
+          neighbor_node->f = tentative_g + GetHeuristic(neighbor_node, goal_node);
+          neighbor_node->parent = current_node;
+          open_set.push(neighbor_node);
+        }
       }
     }
   }
@@ -211,16 +223,30 @@ int Astar::DecideLayer(const Node* cur_node) const {
 
     const Node& search_node = grid_map_[cur_layer][i][j];
 
-    if (abs(search_node.height - cur_height) > 0.2) {
+    if (abs(search_node.height - cur_height) > resolution_ * 5) {
       continue;
     }
 
     if (search_node.ele > 0.5) {
       true_layer = std::min(cur_layer + 1, max_layers_ - 1);
-      break;
+      return true_layer;
     } else if (search_node.ele < -0.5) {
       true_layer = std::max(cur_layer - 1, 0);
-      break;
+      return true_layer;
+    }
+  }
+
+  if (cur_node->cost > cost_threshold_) {
+    double best_cost = cur_node->cost;
+    for (const auto offset : search_layers_offset_) {
+      int cur_layer = layer + offset;
+      if (cur_layer < 0 || cur_layer >= max_layers_) continue;
+      const Node& search_node = grid_map_[cur_layer][i][j];
+      if (abs(search_node.height - cur_height) > resolution_ * 5) continue;
+      if (search_node.cost < best_cost) {
+        best_cost = search_node.cost;
+        true_layer = cur_layer;
+      }
     }
   }
 

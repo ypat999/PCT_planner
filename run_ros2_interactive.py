@@ -44,6 +44,7 @@ sys.path.insert(0, ROOT + '/planner')
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy
 from std_msgs.msg import ColorRGBA
 from sensor_msgs.msg import PointCloud2, PointField
 from geometry_msgs.msg import PointStamped, TransformStamped
@@ -175,8 +176,9 @@ class PCTNode(Node):
         self.pcd_name = os.path.splitext(self.scene_cfg.pcd.file_name)[0]
 
         # Publishers
-        self.pc_pub     = self.create_publisher(PointCloud2, '/global_points', 1)
-        self.tomo_pub   = self.create_publisher(PointCloud2, '/tomogram',       1)
+        _tl_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.pc_pub     = self.create_publisher(PointCloud2, '/global_points', _tl_qos)
+        self.tomo_pub   = self.create_publisher(PointCloud2, '/tomogram',       _tl_qos)
         self.path_pub   = self.create_publisher(Path,        '/pct_path',       1)
         self.marker_pub = self.create_publisher(Marker,      '/pct_marker',     1)
         
@@ -420,7 +422,7 @@ class PCTNode(Node):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--scene', type=str, default='Building',
-                        choices=['Building', 'Clinic', 'Plaza'],
+                        choices=['Building', 'BuildingSim', 'Clinic', 'Plaza'],
                         help='Scene name (default: Building)')
     parser.add_argument('--skip-tomo', action='store_true',
                         help='Skip tomography if pickle already exists')

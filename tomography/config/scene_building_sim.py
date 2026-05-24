@@ -8,14 +8,14 @@ class SceneBuildingSim():
     map = SceneMap()
     map.resolution = 0.10
     map.ground_h = 0.0
-    map.slice_dh = 0.5
+    map.slice_dh = 0.3
 
     trav = SceneTrav()
-    trav.kernel_size = 7
-    trav.interval_min = 0.50
+    trav.kernel_size = 5
+    trav.interval_min = 0.10
     trav.interval_free = 0.65
-    trav.slope_max = 0.40
-    trav.step_max = 0.17
+    trav.slope_max = 0.80
+    trav.step_max = 0.30
     trav.standable_ratio = 0.20
     trav.cost_barrier = 50.0
     trav.safe_margin = 0.4

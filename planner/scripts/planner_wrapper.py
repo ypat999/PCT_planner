@@ -61,13 +61,17 @@ class TomogramPlanner(object):
 
         gateway_up = np.zeros_like(trav, dtype=bool)
         mask_t = diff_t < -8.0
-        mask_g = (diff_g < 0.1) & (~np.isnan(elev_g[1:]))
-        gateway_up[:-1] = np.logical_and(mask_t, mask_g)
+        mask_g_flat = (diff_g < 0.1) & (~np.isnan(elev_g[1:]))
+        mask_g_stair = (diff_g < 0.5) & (diff_g >= 0.1) & (~np.isnan(elev_g[1:]))
+        mask_stair_up = mask_g_stair & (elev_g[1:] > elev_g[:-1])
+        gateway_up[:-1] = np.logical_and(mask_t, mask_g_flat) | np.logical_and(mask_t, mask_stair_up)
 
         gateway_dn = np.zeros_like(trav, dtype=bool)
         mask_t = diff_t > 8.0
-        mask_g = (diff_g < 0.1) & (~np.isnan(elev_g[:-1]))
-        gateway_dn[1:] = np.logical_and(mask_t, mask_g)
+        mask_g_flat = (diff_g < 0.1) & (~np.isnan(elev_g[:-1]))
+        mask_g_stair = (diff_g < 0.5) & (diff_g >= 0.1) & (~np.isnan(elev_g[:-1]))
+        mask_stair_dn = mask_g_stair & (elev_g[:-1] > elev_g[1:])
+        gateway_dn[1:] = np.logical_and(mask_t, mask_g_flat) | np.logical_and(mask_t, mask_stair_dn)
         
         gateway = np.zeros_like(trav, dtype=np.int32)
         gateway[gateway_up] = 2
@@ -77,7 +81,7 @@ class TomogramPlanner(object):
             max_heading_rate=self.max_heading_rate, use_quintic=self.use_quintic
         )
         self.planner.init_map(
-            20, 15, self.resolution, self.n_slice, 0.2,
+            45, 15, self.resolution, self.n_slice, 0.2,
             trav.reshape(-1, trav.shape[-1]).astype(np.double),
             elev_g.reshape(-1, elev_g.shape[-1]).astype(np.double),
             elev_c.reshape(-1, elev_c.shape[-1]).astype(np.double),

@@ -91,6 +91,26 @@ class Tomogram(object):
         self.trav_cost *= 0.
         self.inflated_cost *= 0.
 
+    def _interpolate_missing(self, data, threshold, max_iter=30):
+        missing = data <= threshold
+        if not cp.any(missing):
+            return
+        for _ in range(max_iter):
+            still_missing = data <= threshold
+            if not cp.any(still_missing):
+                break
+            neighbors = [
+                cp.roll(data, 1, axis=2),
+                cp.roll(data, -1, axis=2),
+                cp.roll(data, 1, axis=1),
+                cp.roll(data, -1, axis=1),
+            ]
+            valid = [n > threshold for n in neighbors]
+            count = sum(v.astype(cp.float32) for v in valid)
+            total = sum(cp.where(v, n, 0.0) for v, n in zip(valid, neighbors))
+            fill_mask = still_missing & (count > 0)
+            data[fill_mask] = (total / cp.maximum(count, 1))[fill_mask]
+
     def point2map(self, points):
         points = cp.asarray(points)
         points = points[~cp.isnan(points).any(axis=1)]
@@ -107,13 +127,18 @@ class Tomogram(object):
             size=(points.shape[0])
         )
 
+        missing_g_mask = self.layers_g <= -1e5
+
+        layers_g_filled = self.layers_g.copy()
+        self._interpolate_missing(layers_g_filled, -1e5)
+
         diff_x_sq = cp.maximum(
-            (self.layers_g[:, 1:-1, :] - self.layers_g[:, :-2, :]) ** 2, 
-            (self.layers_g[:, 1:-1, :] - self.layers_g[:,  2:, :]) ** 2
+            (layers_g_filled[:, 1:-1, :] - layers_g_filled[:, :-2, :]) ** 2, 
+            (layers_g_filled[:, 1:-1, :] - layers_g_filled[:,  2:, :]) ** 2
         )
         diff_y_sq = cp.maximum(
-            (self.layers_g[:, :, 1:-1] - self.layers_g[:, :, :-2]) ** 2, 
-            (self.layers_g[:, :, 1:-1] - self.layers_g[:, :,  2:]) ** 2
+            (layers_g_filled[:, :, 1:-1] - layers_g_filled[:, :, :-2]) ** 2, 
+            (layers_g_filled[:, :, 1:-1] - layers_g_filled[:, :,  2:]) ** 2
         )
         self.grad_mag_sq[:, 1:-1, 1:-1] = diff_x_sq[:, :, 1:-1] + diff_y_sq[:, 1:-1, :]
         self.grad_mag_max[:, 1:-1, 1:-1] = cp.maximum(diff_x_sq[:, :, 1:-1], diff_y_sq[:, 1:-1, :])
@@ -141,6 +166,8 @@ class Tomogram(object):
             size=(self.n_slice_init * self.map_dim_x * self.map_dim_y)
         )
 
+        self.inflated_cost[missing_g_mask] = self.cost_barrier
+
         end_gpu.record()
         end_gpu.synchronize()
         gpu_t_trav = cp.cuda.get_elapsed_time(start_gpu, end_gpu)
@@ -160,7 +187,12 @@ class Tomogram(object):
                 mask_u_g = diff_h[m_idx] > 0
                 mask_t = self.inflated_cost[m_idx] < self.cost_barrier
                 unique = (mask_l_g | mask_l_t) & mask_u_g & mask_t
-                if cp.any(unique):
+
+                mask_slope = self.inflated_cost[m_idx] < self.cost_barrier * 2.0
+                mask_has_ground = self.layers_g[m_idx] > -1e5
+                stair_unique = mask_u_g & mask_slope & mask_has_ground & mask_l_g
+
+                if cp.any(unique) or cp.any(stair_unique):
                     idx_simp.append(m_idx)
                     l_idx = m_idx
                 m_idx += 1
