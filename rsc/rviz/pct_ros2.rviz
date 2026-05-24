@@ -75,7 +75,7 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
-    - Alpha: 1
+    - Alpha: 0.5
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 50
@@ -141,7 +141,8 @@ Visualization Manager:
       Enabled: true
       Name: Markers (start/end/path)
       Namespaces:
-        {}
+        pct: true
+        pct_clicks: true
       Topic:
         Depth: 1
         Durability Policy: Volatile
@@ -196,7 +197,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 17.139270782470703
+      Distance: 24.079442977905273
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -211,10 +212,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.21479621529579163
+      Pitch: 0.1797965168952942
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 2.4173696041107178
+      Yaw: 2.3873705863952637
     Saved: ~
 Window Geometry:
   Displays:
@@ -230,5 +231,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 2085
-  X: 1296
-  Y: 239
+  X: 1302
+  Y: 266
