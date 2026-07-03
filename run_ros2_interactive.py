@@ -77,6 +77,7 @@ SCENES = {
     'BuildingSim': _tomo_cfg.SceneBuildingSim,
     'Clinic': _tomo_cfg.SceneClinic,
     'Plaza': _tomo_cfg.ScenePlaza,
+    'RK1F': _tomo_cfg.Scene1F,
 }
 
 # Planner modules
@@ -422,7 +423,7 @@ class PCTNode(Node):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--scene', type=str, default='Building',
-                        choices=['Building', 'BuildingSim', 'Clinic', 'Plaza'],
+                        choices=['Building', 'BuildingSim', 'Clinic', 'Plaza', 'RK1F'],
                         help='Scene name (default: Building)')
     parser.add_argument('--skip-tomo', action='store_true',
                         help='Skip tomography if pickle already exists')

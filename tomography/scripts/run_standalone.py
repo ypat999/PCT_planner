@@ -12,7 +12,7 @@ from tomogram import Tomogram
 
 sys.path.append('../')
 from config import Config
-from config import SceneClinic, SceneBuilding, ScenePlaza
+from config import SceneClinic, SceneBuilding, ScenePlaza, Scene1F
 
 rsg_root = os.path.dirname(os.path.abspath(__file__)) + '/../..'
 
@@ -20,6 +20,7 @@ SCENES = {
     'Clinic': SceneClinic,
     'Building': SceneBuilding,
     'Plaza': ScenePlaza,
+    'RK1F': Scene1F,
 }
 
 
